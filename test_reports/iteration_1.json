@@ -1,0 +1,30 @@
+{
+  "summary": "Comprehensive backend + frontend testing of UINSA CPL app. 15/15 pytest cases passed covering auth, CRUD (fakultas/prodi/matakuliah), grades weighted-average correctness (including 92.22 example and multi-criteria 75.5), dashboard shape, and auth guards (401 on all protected endpoints). Frontend E2E verified: login redirects to dashboard, KPIs correct (2/3/4/0), navigation across all pages works, Input Nilai form saves a grade with correct renormalized weighted score (Pratinjau shows 92.22 A and stored row shows 92.22 A). Delete grade works with confirmation toast.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Dashboard - Distribusi Predikat (Pie/Legend)", "issue": "Legend shows literal text 'count count count count count' instead of grade labels A/B/C/D/E. Recharts Legend uses the dataKey 'count' as the name. Should set name or use nameKey='grade' and Legend formatter.", "selector": "Distribusi Predikat card", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Fix Distribusi Predikat legend to display grade names (A/B/C/D/E) instead of 'count'. In Recharts, pass nameKey='grade' on Pie/Bar or Legend formatter mapping payload.value from grade field."
+  ],
+  "critical_code_review_comments": [
+    "CORSMiddleware in server.py hardcodes 'http://localhost:3000' along with FRONTEND_URL env. Works, but consider a list from CORS_ORIGINS env (already declared, unused).",
+    "dashboard() total_matkul variable computed but never returned; dead code (line 437). Safe to remove.",
+    "Cookies set with samesite='none' + secure=True require HTTPS (fine for prod). Local HTTP dev browsers may drop them; testing here uses https preview so OK.",
+    "seed_admin correctly rehashes password when env password changes (good).",
+    "No brute-force lockout implemented (playbook mentions after 5 fails). Not required by spec but worth noting."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "~95% (all critical flows working; 1 minor legend label issue)"},
+  "test_credentials": "imtinan.fakhri@gmail.com / uinsa2024 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None; used existing seed (2 fakultas, 3 prodi, 4 matakuliah). Test-created records were cleaned up.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Score inputs use lowercase suffix data-testid: cpl-score-input-cpl-s1 etc. Selects are shadcn Radix (BUTTON with role combobox); use click + get_by_role('option', name=...). Weighted-average example S1=80,KU1=90,KK1=100 => 92.22 A verified end-to-end.",
+  "rca of the issue": "Distribusi Predikat legend: In Dashboard.js, the Pie/Bar Legend uses the numeric dataKey 'count' as the display name because 'name' prop was not set. Suggested fix: pass nameKey='grade' to Pie or add Legend formatter={(value, entry) => entry.payload.grade}."
+}

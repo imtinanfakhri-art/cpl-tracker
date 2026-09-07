@@ -1,0 +1,18 @@
+.App { min-height: 100vh; }
+
+@keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+.brand-gradient {
+    background: linear-gradient(135deg, #064E3B 0%, #043E2F 55%, #022c22 100%);
+}
+
+.gold-underline {
+    background-image: linear-gradient(90deg, #F59E0B, #D97706);
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    background-size: 100% 3px;
+}

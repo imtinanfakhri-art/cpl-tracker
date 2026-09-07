@@ -1,0 +1,262 @@
+{
+  "project_name": "Sistem Informasi Penghitungan Capaian Kompetensi Lulusan (CPL) UINSA",
+  "app_type": "hybrid_fullstack (Academic ERP / University Dashboard)",
+  "language": "id (Indonesian)",
+  "theme": "Light theme base with deep dark-green (#004D25 or #0C381E) headers, gold (#D4AF37 or #E5B80B) accents, crisp white (#FFFFFF) cards, and rich dark charcoal/black text (#0F172A / #111827)",
+  "logo_url": "https://customer-assets-rejwkqb3.emergentagent.net/job_d77d2e32-92b6-4a5f-8e92-c98005f2a252/artifacts/jvsjfuzl_Universitas-Islam-negeri-UIN-Sunan-Ampel-Logo.png",
+  "colors": {
+    "primary_dark_green": "#064E3B",
+    "primary_dark_green_hover": "#043E2F",
+    "primary_green_emerald": "#059669",
+    "gold_accent": "#D97706",
+    "gold_amber": "#F59E0B",
+    "gold_light_bg": "#FEF3C7",
+    "gold_border": "#FCD34D",
+    "surface_white": "#FFFFFF",
+    "surface_offwhite": "#F8FAFC",
+    "surface_card": "#FFFFFF",
+    "border_light": "#E2E8F0",
+    "border_medium": "#CBD5E1",
+    "text_dark_primary": "#0F172A",
+    "text_dark_secondary": "#475569",
+    "text_muted": "#64748B",
+    "black_solid": "#000000",
+    "categories": {
+      "sikap": {
+        "name": "Sikap",
+        "weight_percent": 20,
+        "criteria_count": 3,
+        "badge_color": "bg-emerald-100 text-emerald-800 border-emerald-300",
+        "chart_color": "#059669"
+      },
+      "pengetahuan": {
+        "name": "Pengetahuan",
+        "weight_percent": 10,
+        "criteria_count": 4,
+        "badge_color": "bg-amber-100 text-amber-800 border-amber-300",
+        "chart_color": "#D97706"
+      },
+      "keterampilan_umum": {
+        "name": "Keterampilan Umum",
+        "weight_percent": 30,
+        "criteria_count": 2,
+        "badge_color": "bg-teal-100 text-teal-800 border-teal-300",
+        "chart_color": "#0D9488"
+      },
+      "keterampilan_khusus": {
+        "name": "Keterampilan Khusus",
+        "weight_percent": 40,
+        "criteria_count": 3,
+        "badge_color": "bg-yellow-100 text-yellow-900 border-yellow-400",
+        "chart_color": "#EAB308"
+      }
+    }
+  },
+  "typography": {
+    "heading_font": "Plus Jakarta Sans, sans-serif",
+    "body_font": "Inter, sans-serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "rules": {
+      "page_title": "text-2xl sm:text-3xl font-bold tracking-tight text-slate-900",
+      "section_title": "text-lg sm:text-xl font-semibold text-slate-800",
+      "card_title": "text-base font-semibold text-slate-900",
+      "body": "text-sm text-slate-600 leading-relaxed",
+      "score_highlight": "font-mono font-bold text-lg text-emerald-900"
+    }
+  },
+  "layout_and_navigation": {
+    "header": {
+      "bg": "bg-[#064E3B] text-white border-b border-[#043E2F]",
+      "logo_container": "flex items-center gap-3 py-2 px-4 bg-white/10 rounded-lg backdrop-blur-md border border-white/20",
+      "title": "UIN Sunan Ampel Surabaya - Sistem Informasi CPL",
+      "subtitle": "Outcome-Based Education (OBE) Management System"
+    },
+    "sidebar": {
+      "bg": "bg-slate-900 text-slate-200 border-r border-slate-800",
+      "active_item": "bg-[#064E3B] text-amber-300 border-l-4 border-amber-400 font-semibold shadow-sm",
+      "hover_item": "hover:bg-slate-800 hover:text-white transition-colors"
+    },
+    "grid_system": {
+      "dashboard_kpi_cards": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6",
+      "dashboard_charts": "grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6",
+      "form_sections": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+    }
+  },
+  "cpl_criteria_definition": [
+    {
+      "code": "CPL-S1",
+      "category": "Sikap",
+      "category_key": "sikap",
+      "label": "Bertaqwa kepada Tuhan YME dan menunjukkan sikap religius khas UINSA",
+      "weight": 20
+    },
+    {
+      "code": "CPL-S2",
+      "category": "Sikap",
+      "category_key": "sikap",
+      "label": "Menjunjung tinggi nilai kemanusiaan, etika, dan integritas akademik",
+      "weight": 20
+    },
+    {
+      "code": "CPL-S3",
+      "category": "Sikap",
+      "category_key": "sikap",
+      "label": "Berkontribusi dalam peningkatan mutu kehidupan bermasyarakat dan bernegara",
+      "weight": 20
+    },
+    {
+      "code": "CPL-P1",
+      "category": "Pengetahuan",
+      "category_key": "pengetahuan",
+      "label": "Menguasai konsep teoritis bidang keilmuan secara mendalam",
+      "weight": 10
+    },
+    {
+      "code": "CPL-P2",
+      "category": "Pengetahuan",
+      "category_key": "pengetahuan",
+      "label": "Menguasai metodologi penelitian dan pemikiran logis, kritis, sistematis",
+      "weight": 10
+    },
+    {
+      "code": "CPL-P3",
+      "category": "Pengetahuan",
+      "category_key": "pengetahuan",
+      "label": "Menguasai standar nasional & internasional dalam pengembangan program",
+      "weight": 10
+    },
+    {
+      "code": "CPL-P4",
+      "category": "Pengetahuan",
+      "category_key": "pengetahuan",
+      "label": "Menguasai prinsip integrasi keilmuan Islam dan sains modern",
+      "weight": 10
+    },
+    {
+      "code": "CPL-KU1",
+      "category": "Keterampilan Umum",
+      "category_key": "keterampilan_umum",
+      "label": "Mampu menerapkan pemikiran logis, kritis, sistematis, dan inovatif",
+      "weight": 30
+    },
+    {
+      "code": "CPL-KU2",
+      "category": "Keterampilan Umum",
+      "category_key": "keterampilan_umum",
+      "label": "Mampu mengambil keputusan secara tepat dalam konteks penyelesaian masalah",
+      "weight": 30
+    },
+    {
+      "code": "CPL-KK1",
+      "category": "Keterampilan Khusus",
+      "category_key": "keterampilan_khusus",
+      "label": "Mampu merancang dan mengimplementasikan karya keahlian bidang prodi",
+      "weight": 40
+    },
+    {
+      "code": "CPL-KK2",
+      "category": "Keterampilan Khusus",
+      "category_key": "keterampilan_khusus",
+      "label": "Mampu melakukan evaluasi & supervisi kualitas hasil kerja bidang studi",
+      "weight": 40
+    },
+    {
+      "code": "CPL-KK3",
+      "category": "Keterampilan Khusus",
+      "category_key": "keterampilan_khusus",
+      "label": "Mampu beradaptasi dengan inovasi teknologi dan kebutuhan industri global",
+      "weight": 40
+    }
+  ],
+  "calculation_formula": {
+    "description": "Rata-rata total nilai CPL dihitung berdasarkan pembobotan porsi 4 kategori CPL",
+    "formula": "Total_Score = (Avg_Sikap * 0.20) + (Avg_Pengetahuan * 0.10) + (Avg_KU * 0.30) + (Avg_KK * 0.40)",
+    "scale": "0 - 100 dengan 2 digit desimal (misal: 87.45)",
+    "predicate_rules": [
+      {
+        "range": "85.00 - 100.00",
+        "grade": "A",
+        "predicate": "Sangat Memuaskan (Excellence)",
+        "color": "text-emerald-700 bg-emerald-50 border-emerald-200"
+      },
+      {
+        "range": "75.00 - 84.99",
+        "grade": "B",
+        "predicate": "Memuaskan (Good)",
+        "color": "text-amber-700 bg-amber-50 border-amber-200"
+      },
+      {
+        "range": "65.00 - 74.99",
+        "grade": "C",
+        "predicate": "Cukup (Satisfactory)",
+        "color": "text-yellow-800 bg-yellow-50 border-yellow-200"
+      },
+      {
+        "range": "50.00 - 64.99",
+        "grade": "D",
+        "predicate": "Kurang (Needs Improvement)",
+        "color": "text-orange-700 bg-orange-50 border-orange-200"
+      },
+      {
+        "range": "0.00 - 49.99",
+        "grade": "E",
+        "predicate": "Gagal (Fail)",
+        "color": "text-rose-700 bg-rose-50 border-rose-200"
+      }
+    ]
+  },
+  "key_features_implementation": {
+    "login_page": "Simple academic credential authentication with UINSA dark green header, university emblem preview, quick demo credentials button for testing",
+    "dashboard": "Combined visual analytics featuring KPI summary cards, Bar Chart (CPL per Kategori), Pie Chart (Distribusi Kelulusan / Pencapaian), and Radar Chart (Spider Web chart comparing 12 CPL criteria)",
+    "input_form": "Batch and individual input form for course scores with dropdown filters for Semester (Ganjil/Genap), Tahun Akademik (e.g. 2020-2021, 2021-2022, 2022-2023, 2023-2024, 2024-2025), Fakultas, Prodi, Mata Kuliah, Kelas (A-D), and Semester (I-VIII). Dynamic 12 CPL inputs with automatic weighted calculation preview",
+    "mata_kuliah_crud": "Management page to add/edit/delete courses grouped by Fakultas & Prodi with CPL criteria assignment options",
+    "fakultas_prodi_crud": "Management page to add/edit/delete Fakultas (e.g., Fakultas Sains dan Teknologi, Fakultas Tarbiyah dan Keguruan) and Program Studi (e.g., Teknik Informatika, Sistem Informasi, Pendidikan Agama Islam)",
+    "reports_and_export": "Comprehensive report page with print browser optimization (@media print styling) and PDF export capability per Tahun Akademik, Mata Kuliah, and CPL criteria",
+    "toast_notifications": "Use Sonner toast notifications for all save/update/delete/export actions"
+  },
+  "image_urls": [
+    {
+      "category": "logo",
+      "url": "https://customer-assets-rejwkqb3.emergentagent.net/job_d77d2e32-92b6-4a5f-8e92-c98005f2a252/artifacts/jvsjfuzl_Universitas-Islam-negeri-UIN-Sunan-Ampel-Logo.png",
+      "description": "Logo Resmi UIN Sunan Ampel Surabaya (Dark Green and Gold emblem)"
+    },
+    {
+      "category": "campus_hero",
+      "url": "https://images.unsplash.com/photo-1732115234692-3ee71d5363af?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjd8MHwxfHNlYXJjaHxfMTI0fHx1bml2ZXJzaXR5fGVufDB8fHx8MTc4ODc4MjAxOHww&ixlib=rb-4.1.0&q=85",
+      "description": "Gedung Utama Kampus UINSA Surabaya"
+    },
+    {
+      "category": "graduation_academic",
+      "url": "https://images.unsplash.com/photo-1759328381007-64559a862aa6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjd8MHwxfHNlYXJjaH33fHx1bml2ZXJzaXR5fGVufDB8fHx8MTc4ODc4MjAxOHww&ixlib=rb-4.1.0&q=85",
+      "description": "Wisuda dan Penilaian Capaian Kelulusan Akademik"
+    }
+  ],
+  "testing_requirements": {
+    "data_testid_convention": "kebab-case, explicit and role-based",
+    "examples": [
+      "data-testid=\"login-email-input\"",
+      "data-testid=\"login-password-input\"",
+      "data-testid=\"login-submit-button\"",
+      "data-testid=\"dashboard-weighted-average-card\"",
+      "data-testid=\"cpl-input-form-academic-year-select\"",
+      "data-testid=\"cpl-input-form-semester-type-select\"",
+      "data-testid=\"cpl-input-form-faculty-select\"",
+      "data-testid=\"cpl-input-form-prodi-select\"",
+      "data-testid=\"cpl-input-form-course-select\"",
+      "data-testid=\"cpl-input-form-class-select\"",
+      "data-testid=\"cpl-input-form-semester-number-select\"",
+      "data-testid=\"cpl-score-input-cpl-s1\"",
+      "data-testid=\"save-cpl-grade-button\"",
+      "data-testid=\"export-pdf-report-button\"",
+      "data-testid=\"print-report-button\""
+    ]
+  },
+  "instructions_to_main_agent": [
+    "You MUST use JavaScript (.js/.jsx) files exclusively. Do NOT create TypeScript (.tsx) files.",
+    "Follow the white, dark green (#064E3B), gold (#D97706 / #F59E0B), and black palette strictly.",
+    "Display the UINSA logo in the header and login screen prominently using the provided asset URL.",
+    "Ensure all 12 CPL criteria and the 4 categories (Sikap 20%, Pengetahuan 10%, Keterampilan Umum 30%, Keterampilan Khusus 40%) are clearly rendered and calculated with 2 decimal precision.",
+    "Support both browser window print (@media print) and PDF export for reports.",
+    "Add test attributes data-testid to every interactive form field, filter, button, tab, and table row."
+  ]
+}
