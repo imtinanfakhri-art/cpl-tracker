@@ -1,17 +1,20 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { LOGO_URL } from "@/lib/cpl";
-import { LayoutDashboard, PencilLine, BookOpen, Building2, FileBarChart2, LogOut } from "lucide-react";
+import { LayoutDashboard, PencilLine, BookOpen, Building2, FileBarChart2, Users, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 const NAV = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
-  { to: "/input", label: "Input Nilai CPL", icon: PencilLine, testid: "nav-input" },
-  { to: "/matakuliah", label: "Mata Kuliah", icon: BookOpen, testid: "nav-matakuliah" },
-  { to: "/fakultas", label: "Fakultas & Prodi", icon: Building2, testid: "nav-fakultas" },
-  { to: "/laporan", label: "Laporan & Cetak", icon: FileBarChart2, testid: "nav-laporan" },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard", roles: ["admin", "kaprodi", "dosen"] },
+  { to: "/input", label: "Input Nilai CPL", icon: PencilLine, testid: "nav-input", roles: ["admin", "kaprodi", "dosen"] },
+  { to: "/matakuliah", label: "Mata Kuliah", icon: BookOpen, testid: "nav-matakuliah", roles: ["admin", "kaprodi"] },
+  { to: "/fakultas", label: "Fakultas & Prodi", icon: Building2, testid: "nav-fakultas", roles: ["admin"] },
+  { to: "/users", label: "Manajemen Pengguna", icon: Users, testid: "nav-users", roles: ["admin"] },
+  { to: "/laporan", label: "Laporan & Cetak", icon: FileBarChart2, testid: "nav-laporan", roles: ["admin", "kaprodi", "dosen"] },
 ];
+
+const ROLE_LABEL = { admin: "Administrator", kaprodi: "Kepala Prodi", dosen: "Dosen" };
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -38,7 +41,7 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 px-3 py-5 space-y-1">
-          {NAV.map((item) => {
+          {NAV.filter((item) => item.roles.includes(user?.role)).map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
@@ -62,6 +65,7 @@ export default function Layout() {
         </nav>
 
         <div className="p-4 border-t border-white/10">
+          <div className="text-xs text-amber-300/90 mb-0.5 font-medium">{ROLE_LABEL[user?.role] || user?.role}</div>
           <div className="text-xs text-slate-400 mb-2 truncate" data-testid="current-user-email">
             {user?.email}
           </div>

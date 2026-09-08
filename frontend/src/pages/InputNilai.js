@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import {
   CATEGORIES, CATEGORY_MAP, CRITERIA_MAP, codesByCategory, computeScores, predicateFor, fmt,
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Save, Trash2, Pencil, X, Loader2 } from "lucide-react";
+import { Save, Trash2, Pencil, X, Loader2, Upload, FileDown, Search } from "lucide-react";
 import { toast } from "sonner";
 
 export default function InputNilai() {
@@ -20,6 +20,11 @@ export default function InputNilai() {
   const [grades, setGrades] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState(null);
+  const [tblSearch, setTblSearch] = useState("");
+  const [tblTahun, setTblTahun] = useState("all");
+  const [tblKelas, setTblKelas] = useState("all");
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef(null);
 
   const [form, setForm] = useState({
     fakultas_id: "", prodi_id: "", mata_kuliah_id: "",
@@ -101,6 +106,55 @@ export default function InputNilai() {
     await api.delete(`/grades/${id}`);
     toast.success("Data dihapus");
     loadGrades();
+  };
+
+  const filteredGrades = useMemo(() => grades.filter((g) => {
+    if (tblTahun !== "all" && g.tahun_akademik !== tblTahun) return false;
+    if (tblKelas !== "all" && g.kelas !== tblKelas) return false;
+    if (tblSearch && !`${g.mata_kuliah_name} ${g.mata_kuliah_code} ${g.prodi_name}`.toLowerCase().includes(tblSearch.toLowerCase())) return false;
+    return true;
+  }), [grades, tblTahun, tblKelas, tblSearch]);
+
+  const CSV_HEADERS = ["Kode Mata Kuliah", "Tahun Akademik", "Semester", "Kelas", "Semester Mahasiswa", "CPL-S1", "CPL-S2", "CPL-S3", "CPL-P1", "CPL-P2", "CPL-P3", "CPL-P4", "CPL-KU1", "CPL-KU2", "CPL-KK1", "CPL-KK2", "CPL-KK3"];
+
+  const downloadTemplate = () => {
+    const example = ["TI301", "2024-2025", "Ganjil", "A", "V", "80", "85", "78", "90", "", "", "", "88", "82", "95", "90", "85"];
+    const csv = CSV_HEADERS.join(",") + "\n" + example.join(",") + "\n";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "template-nilai-cpl.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) { toast.error("File CSV kosong atau tidak valid."); return; }
+    const header = lines[0].split(",").map((h) => h.trim());
+    const idx = (name) => header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
+    const cKode = idx("Kode Mata Kuliah"), cTahun = idx("Tahun Akademik"), cSem = idx("Semester"), cKelas = idx("Kelas"), cSemMhs = idx("Semester Mahasiswa");
+    const cplCols = header.map((h, i) => ({ h, i })).filter((x) => x.h.toUpperCase().startsWith("CPL-"));
+    const rows = [];
+    for (let r = 1; r < lines.length; r++) {
+      const cells = lines[r].split(",");
+      const code = (cells[cKode] || "").trim();
+      if (!code) continue;
+      const scores = {};
+      cplCols.forEach(({ h, i }) => { const v = (cells[i] || "").trim(); if (v !== "" && !Number.isNaN(Number(v))) scores[h.toUpperCase()] = Number(v); });
+      rows.push({ mata_kuliah_code: code, tahun_akademik: (cells[cTahun] || "").trim(), semester_type: (cells[cSem] || "").trim(), kelas: (cells[cKelas] || "").trim(), semester_number: (cells[cSemMhs] || "").trim(), scores });
+    }
+    if (!rows.length) { toast.error("Tidak ada baris valid di CSV."); return; }
+    setImporting(true);
+    try {
+      const { data } = await api.post("/grades/bulk", { rows });
+      toast.success(`${data.created} data nilai berhasil diimpor`);
+      if (data.errors?.length) toast.warning(`${data.errors.length} baris gagal: ${data.errors.slice(0, 2).join("; ")}`);
+      loadGrades();
+    } catch (err) { toast.error(apiError(err.response?.data?.detail)); }
+    finally { setImporting(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 
   const visibleCats = catFilter === "all" ? CATEGORIES : CATEGORIES.filter((c) => c.key === catFilter);
@@ -239,9 +293,42 @@ export default function InputNilai() {
         <Card className="p-10 text-center text-slate-400 shadow-sm">Pilih mata kuliah untuk mulai memasukkan nilai CPL.</Card>
       )}
 
+      {/* CSV Import */}
+      <Card className="mt-8 p-5 shadow-sm border-emerald-200 bg-emerald-50/40" data-testid="csv-import-card">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display font-semibold text-slate-800 flex items-center gap-2"><Upload className="w-4 h-4 text-[#064E3B]" />Impor Nilai Massal (CSV)</h3>
+            <p className="text-xs text-slate-500 mt-1">Unggah banyak data nilai sekaligus. Gunakan template agar kolom sesuai.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={downloadTemplate} data-testid="download-template-button"><FileDown className="w-4 h-4 mr-2" />Template CSV</Button>
+            <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} className="hidden" data-testid="csv-file-input" />
+            <Button onClick={() => fileRef.current?.click()} disabled={importing} data-testid="import-csv-button" className="bg-[#064E3B] hover:bg-[#043E2F]">
+              {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}Unggah CSV
+            </Button>
+          </div>
+        </div>
+      </Card>
+
       {/* Existing records */}
-      <Card className="mt-8 shadow-sm overflow-hidden">
-        <div className="p-5 border-b"><h3 className="font-display font-semibold text-slate-800">Data Nilai Tersimpan</h3></div>
+      <Card className="mt-6 shadow-sm overflow-hidden">
+        <div className="p-5 border-b flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-display font-semibold text-slate-800">Data Nilai Tersimpan</h3>
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input placeholder="Cari mata kuliah / prodi..." value={tblSearch} onChange={(e) => setTblSearch(e.target.value)} data-testid="grades-search-input" className="pl-9 w-56 h-9" />
+            </div>
+            <Select value={tblTahun} onValueChange={setTblTahun}>
+              <SelectTrigger className="w-[140px] h-9" data-testid="grades-year-filter"><SelectValue placeholder="Tahun" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua Tahun</SelectItem>{TAHUN_AKADEMIK.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={tblKelas} onValueChange={setTblKelas}>
+              <SelectTrigger className="w-[120px] h-9" data-testid="grades-class-filter"><SelectValue placeholder="Kelas" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua Kelas</SelectItem>{KELAS.map((k) => <SelectItem key={k} value={k}>Kelas {k}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="grades-table">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
@@ -256,10 +343,10 @@ export default function InputNilai() {
               </tr>
             </thead>
             <tbody>
-              {grades.length === 0 && (
+              {filteredGrades.length === 0 && (
                 <tr><td colSpan={7} className="text-center py-8 text-slate-400">Belum ada data nilai.</td></tr>
               )}
-              {grades.map((g) => {
+              {filteredGrades.map((g) => {
                 const p = predicateFor(g.total_score);
                 return (
                   <tr key={g.id} className="border-t hover:bg-slate-50/60" data-testid={`grade-row-${g.id}`}>

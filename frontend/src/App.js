@@ -9,6 +9,7 @@ import InputNilai from "@/pages/InputNilai";
 import MataKuliahPage from "@/pages/MataKuliahPage";
 import FakultasProdiPage from "@/pages/FakultasProdiPage";
 import LaporanPage from "@/pages/LaporanPage";
+import UserManagement from "@/pages/UserManagement";
 import { Loader2 } from "lucide-react";
 
 function Protected({ children }) {
@@ -41,6 +42,7 @@ function App() {
               <Route path="/input" element={<InputNilai />} />
               <Route path="/matakuliah" element={<MataKuliahPage />} />
               <Route path="/fakultas" element={<FakultasProdiPage />} />
+              <Route path="/users" element={<UserManagement />} />
               <Route path="/laporan" element={<LaporanPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

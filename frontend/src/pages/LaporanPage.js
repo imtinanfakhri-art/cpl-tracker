@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 import {
   CATEGORIES, CATEGORY_MAP, CRITERIA, CRITERIA_MAP, predicateFor, fmt,
   TAHUN_AKADEMIK, LOGO_URL,
@@ -11,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Printer, Download, Loader2 } from "lucide-react";
+import { Printer, Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, Legend,
 } from "recharts";
@@ -119,6 +120,18 @@ export default function LaporanPage() {
     toast.success("PDF berhasil diunduh");
   };
 
+  const exportExcel = () => {
+    let data;
+    if (reportType === "tahun") data = byYear.map((r) => ({ "Tahun Akademik": r.key, "Jumlah Data": r.count, "Rata-rata CPL": r.avg, "Predikat": predicateFor(r.avg).grade }));
+    else if (reportType === "matakuliah") data = byCourse.map((r) => ({ "Mata Kuliah": r.name, "Prodi": r.prodi, "Jumlah Data": r.count, "Rata-rata CPL": r.avg, "Predikat": predicateFor(r.avg).grade }));
+    else data = byCpl.map((r) => ({ "Kode": r.code, "Kategori": r.category, "Kriteria": r.label, "Rata-rata": r.avg, "Jumlah Nilai": r.count }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Laporan CPL");
+    XLSX.writeFile(wb, `laporan-cpl-${reportType}.xlsx`);
+    toast.success("Excel berhasil diunduh");
+  };
+
   return (
     <div className="fade-up">
       <div className="no-print flex flex-wrap items-end justify-between gap-4 mb-6">
@@ -128,7 +141,8 @@ export default function LaporanPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => window.print()} data-testid="print-report-button"><Printer className="w-4 h-4 mr-2" />Cetak</Button>
-          <Button onClick={exportPDF} data-testid="export-pdf-report-button" className="bg-[#D97706] hover:bg-[#b45309] text-white"><Download className="w-4 h-4 mr-2" />Unduh PDF</Button>
+          <Button variant="outline" onClick={exportExcel} data-testid="export-excel-report-button" className="border-emerald-600 text-emerald-700 hover:bg-emerald-50"><FileSpreadsheet className="w-4 h-4 mr-2" />Excel</Button>
+          <Button onClick={exportPDF} data-testid="export-pdf-report-button" className="bg-[#D97706] hover:bg-[#b45309] text-white"><Download className="w-4 h-4 mr-2" />PDF</Button>
         </div>
       </div>
 

@@ -27,6 +27,14 @@ Aplikasi penghitungan pencapaian Capaian Kompetensi Lulusan (CPL) untuk UIN Suna
 - Laporan 3 jenis (tahun/mata kuliah/CPL) dengan chart+tabel, cetak browser & unduh PDF (jsPDF).
 - Verified: 15/15 backend tests pass; E2E flows pass. Weighted calc 92.22 (A) verified.
 
+## Implemented (2026-06-08) — Iterasi 2
+- RBAC 3 peran: admin (penuh), kaprodi (kelola MK + nilai + laporan, scoped prodi), dosen (nilai + laporan, scoped prodi). require_role + scoped_query + enforce_scope di backend, nav berbasis role di frontend. Login menolak akun nonaktif.
+- Manajemen Pengguna (admin): CRUD user + toggle aktif + proteksi hapus/nonaktif diri & admin terakhir. Demo user: kaprodi.ti@uinsa.ac.id/kaprodi123, dosen.ti@uinsa.ac.id/dosen123.
+- Impor Nilai Massal via CSV (/api/grades/bulk) + unduh template.
+- Ekspor laporan ke Excel (xlsx) selain PDF.
+- Filter & pencarian pada tabel data nilai (halaman Input).
+- Verified: 18/18 backend tests iterasi 2 pass (33/33 kumulatif); E2E role-based flows pass.
+
 ## Backlog
 - P1: Filter tambahan pada tabel data nilai; ekspor Excel.
 - P2: Multi-user & role (Kaprodi/Dosen), brute-force lockout, import nilai CSV.

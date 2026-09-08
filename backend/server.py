@@ -141,6 +141,8 @@ async def get_current_user(request: Request) -> dict:
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
             raise HTTPException(status_code=401, detail="User tidak ditemukan")
+        if not user.get("is_active", True):
+            raise HTTPException(status_code=401, detail="Akun dinonaktifkan")
         user["id"] = str(user["_id"])
         user.pop("_id", None)
         user.pop("password_hash", None)
@@ -149,6 +151,41 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Token kedaluwarsa")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token tidak valid")
+
+
+# ---------------------------------------------------------------------------
+# Authorization (RBAC + scope)
+# ---------------------------------------------------------------------------
+ROLE_ADMIN = "admin"
+ROLE_KAPRODI = "kaprodi"
+ROLE_DOSEN = "dosen"
+
+
+def require_role(*allowed):
+    async def checker(user: dict = Depends(get_current_user)):
+        if user.get("role") not in allowed:
+            raise HTTPException(status_code=403, detail="Anda tidak memiliki akses untuk aksi ini")
+        return user
+    return checker
+
+
+def scoped_query(user: dict, base: Optional[dict] = None) -> dict:
+    """Force fakultas/prodi scope for non-admin roles into a Mongo query."""
+    q = dict(base or {})
+    if user.get("role") in (ROLE_KAPRODI, ROLE_DOSEN):
+        if user.get("prodi_id"):
+            q["prodi_id"] = user["prodi_id"]
+        elif user.get("fakultas_id"):
+            q["fakultas_id"] = user["fakultas_id"]
+    return q
+
+
+def enforce_scope(user: dict, fakultas_id: str, prodi_id: str):
+    if user.get("role") in (ROLE_KAPRODI, ROLE_DOSEN):
+        if user.get("prodi_id") and prodi_id != user["prodi_id"]:
+            raise HTTPException(status_code=403, detail="Di luar cakupan prodi Anda")
+        if user.get("fakultas_id") and not user.get("prodi_id") and fakultas_id != user["fakultas_id"]:
+            raise HTTPException(status_code=403, detail="Di luar cakupan fakultas Anda")
 
 
 # ---------------------------------------------------------------------------
@@ -199,11 +236,14 @@ async def login(data: LoginInput, response: Response):
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(data.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Email atau kata sandi salah")
+    if not user.get("is_active", True):
+        raise HTTPException(status_code=403, detail="Akun Anda dinonaktifkan. Hubungi admin.")
     uid = str(user["_id"])
     access = create_access_token(uid, email)
     refresh = create_refresh_token(uid)
     set_auth_cookies(response, access, refresh)
-    return {"id": uid, "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "admin"), "token": access}
+    return {"id": uid, "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "admin"),
+            "fakultas_id": user.get("fakultas_id"), "prodi_id": user.get("prodi_id"), "token": access}
 
 
 @api_router.post("/auth/logout")
@@ -254,7 +294,7 @@ async def list_fakultas(user: dict = Depends(get_current_user)):
 
 
 @api_router.post("/fakultas")
-async def create_fakultas(data: Fakultas, user: dict = Depends(get_current_user)):
+async def create_fakultas(data: Fakultas, user: dict = Depends(require_role(ROLE_ADMIN))):
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
     await db.fakultas.insert_one(doc)
@@ -263,13 +303,13 @@ async def create_fakultas(data: Fakultas, user: dict = Depends(get_current_user)
 
 
 @api_router.put("/fakultas/{fid}")
-async def update_fakultas(fid: str, data: Fakultas, user: dict = Depends(get_current_user)):
+async def update_fakultas(fid: str, data: Fakultas, user: dict = Depends(require_role(ROLE_ADMIN))):
     await db.fakultas.update_one({"id": fid}, {"$set": data.model_dump()})
     return await db.fakultas.find_one({"id": fid}, {"_id": 0})
 
 
 @api_router.delete("/fakultas/{fid}")
-async def delete_fakultas(fid: str, user: dict = Depends(get_current_user)):
+async def delete_fakultas(fid: str, user: dict = Depends(require_role(ROLE_ADMIN))):
     await db.fakultas.delete_one({"id": fid})
     await db.prodi.delete_many({"fakultas_id": fid})
     await db.matakuliah.delete_many({"fakultas_id": fid})
@@ -286,7 +326,7 @@ async def list_prodi(fakultas_id: Optional[str] = None, user: dict = Depends(get
 
 
 @api_router.post("/prodi")
-async def create_prodi(data: Prodi, user: dict = Depends(get_current_user)):
+async def create_prodi(data: Prodi, user: dict = Depends(require_role(ROLE_ADMIN))):
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
     await db.prodi.insert_one(doc)
@@ -295,13 +335,13 @@ async def create_prodi(data: Prodi, user: dict = Depends(get_current_user)):
 
 
 @api_router.put("/prodi/{pid}")
-async def update_prodi(pid: str, data: Prodi, user: dict = Depends(get_current_user)):
+async def update_prodi(pid: str, data: Prodi, user: dict = Depends(require_role(ROLE_ADMIN))):
     await db.prodi.update_one({"id": pid}, {"$set": data.model_dump()})
     return await db.prodi.find_one({"id": pid}, {"_id": 0})
 
 
 @api_router.delete("/prodi/{pid}")
-async def delete_prodi(pid: str, user: dict = Depends(get_current_user)):
+async def delete_prodi(pid: str, user: dict = Depends(require_role(ROLE_ADMIN))):
     await db.prodi.delete_one({"id": pid})
     await db.matakuliah.delete_many({"prodi_id": pid})
     return {"message": "Prodi dihapus"}
@@ -317,11 +357,13 @@ async def list_matakuliah(fakultas_id: Optional[str] = None, prodi_id: Optional[
         q["fakultas_id"] = fakultas_id
     if prodi_id:
         q["prodi_id"] = prodi_id
+    q = scoped_query(user, q)
     return await db.matakuliah.find(q, {"_id": 0}).sort("name", 1).to_list(1000)
 
 
 @api_router.post("/matakuliah")
-async def create_matakuliah(data: MataKuliah, user: dict = Depends(get_current_user)):
+async def create_matakuliah(data: MataKuliah, user: dict = Depends(require_role(ROLE_ADMIN, ROLE_KAPRODI))):
+    enforce_scope(user, data.fakultas_id, data.prodi_id)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
     await db.matakuliah.insert_one(doc)
@@ -330,13 +372,14 @@ async def create_matakuliah(data: MataKuliah, user: dict = Depends(get_current_u
 
 
 @api_router.put("/matakuliah/{mid}")
-async def update_matakuliah(mid: str, data: MataKuliah, user: dict = Depends(get_current_user)):
+async def update_matakuliah(mid: str, data: MataKuliah, user: dict = Depends(require_role(ROLE_ADMIN, ROLE_KAPRODI))):
+    enforce_scope(user, data.fakultas_id, data.prodi_id)
     await db.matakuliah.update_one({"id": mid}, {"$set": data.model_dump()})
     return await db.matakuliah.find_one({"id": mid}, {"_id": 0})
 
 
 @api_router.delete("/matakuliah/{mid}")
-async def delete_matakuliah(mid: str, user: dict = Depends(get_current_user)):
+async def delete_matakuliah(mid: str, user: dict = Depends(require_role(ROLE_ADMIN, ROLE_KAPRODI))):
     await db.matakuliah.delete_one({"id": mid})
     return {"message": "Mata kuliah dihapus"}
 
@@ -370,6 +413,7 @@ async def list_grades(
                  ("tahun_akademik", tahun_akademik), ("semester_type", semester_type), ("kelas", kelas)]:
         if v:
             q[k] = v
+    q = scoped_query(user, q)
     docs = await db.grades.find(q, {"_id": 0}).sort("created_at", -1).to_list(2000)
     for d in docs:
         await enrich_grade(d)
@@ -377,7 +421,8 @@ async def list_grades(
 
 
 @api_router.post("/grades")
-async def create_grade(data: GradeInput, user: dict = Depends(get_current_user)):
+async def create_grade(data: GradeInput, user: dict = Depends(require_role(ROLE_ADMIN, ROLE_KAPRODI, ROLE_DOSEN))):
+    enforce_scope(user, data.fakultas_id, data.prodi_id)
     cat_avg, total, grade, predicate = compute_scores(data.scores)
     doc = data.model_dump()
     doc["id"] = str(uuid.uuid4())
@@ -394,7 +439,8 @@ async def create_grade(data: GradeInput, user: dict = Depends(get_current_user))
 
 
 @api_router.put("/grades/{gid}")
-async def update_grade(gid: str, data: GradeInput, user: dict = Depends(get_current_user)):
+async def update_grade(gid: str, data: GradeInput, user: dict = Depends(require_role(ROLE_ADMIN, ROLE_KAPRODI, ROLE_DOSEN))):
+    enforce_scope(user, data.fakultas_id, data.prodi_id)
     cat_avg, total, grade, predicate = compute_scores(data.scores)
     upd = data.model_dump()
     upd["category_averages"] = cat_avg
@@ -409,9 +455,54 @@ async def update_grade(gid: str, data: GradeInput, user: dict = Depends(get_curr
 
 
 @api_router.delete("/grades/{gid}")
-async def delete_grade(gid: str, user: dict = Depends(get_current_user)):
+async def delete_grade(gid: str, user: dict = Depends(require_role(ROLE_ADMIN, ROLE_KAPRODI, ROLE_DOSEN))):
     await db.grades.delete_one({"id": gid})
     return {"message": "Data nilai dihapus"}
+
+
+class BulkRow(BaseModel):
+    mata_kuliah_code: str
+    tahun_akademik: str
+    semester_type: str
+    kelas: str
+    semester_number: str
+    scores: Dict[str, float]
+
+
+class BulkInput(BaseModel):
+    rows: List[BulkRow]
+
+
+@api_router.post("/grades/bulk")
+async def bulk_grades(data: BulkInput, user: dict = Depends(require_role(ROLE_ADMIN, ROLE_KAPRODI, ROLE_DOSEN))):
+    created = 0
+    errors = []
+    now = datetime.now(timezone.utc).isoformat()
+    for i, row in enumerate(data.rows):
+        mk = await db.matakuliah.find_one({"code": row.mata_kuliah_code}, {"_id": 0})
+        if not mk:
+            errors.append(f"Baris {i + 1}: kode mata kuliah '{row.mata_kuliah_code}' tidak ditemukan")
+            continue
+        try:
+            enforce_scope(user, mk["fakultas_id"], mk["prodi_id"])
+        except HTTPException:
+            errors.append(f"Baris {i + 1}: mata kuliah '{row.mata_kuliah_code}' di luar cakupan Anda")
+            continue
+        clean = {k: float(v) for k, v in (row.scores or {}).items() if k in {c["code"] for c in CRITERIA} and v not in (None, "")}
+        if not clean:
+            errors.append(f"Baris {i + 1}: tidak ada nilai kriteria CPL yang valid")
+            continue
+        cat_avg, total, grade, predicate = compute_scores(clean)
+        doc = {
+            "id": str(uuid.uuid4()), "fakultas_id": mk["fakultas_id"], "prodi_id": mk["prodi_id"],
+            "mata_kuliah_id": mk["id"], "tahun_akademik": row.tahun_akademik, "semester_type": row.semester_type,
+            "kelas": row.kelas, "semester_number": row.semester_number, "scores": clean,
+            "category_averages": cat_avg, "total_score": total, "grade": grade, "predicate": predicate,
+            "created_at": now, "updated_at": now,
+        }
+        await db.grades.insert_one(doc)
+        created += 1
+    return {"created": created, "errors": errors}
 
 
 # ---------------------------------------------------------------------------
@@ -431,12 +522,13 @@ async def dashboard(
         q["prodi_id"] = prodi_id
     if tahun_akademik:
         q["tahun_akademik"] = tahun_akademik
+    q = scoped_query(user, q)
     grades = await db.grades.find(q, {"_id": 0}).to_list(5000)
 
     counts = {
         "fakultas": await db.fakultas.count_documents({}),
         "prodi": await db.prodi.count_documents({}),
-        "matakuliah": await db.matakuliah.count_documents({}),
+        "matakuliah": await db.matakuliah.count_documents(scoped_query(user, {})),
         "grades": len(grades),
     }
 
@@ -483,6 +575,95 @@ async def dashboard(
 
 
 # ---------------------------------------------------------------------------
+# User management (admin only)
+# ---------------------------------------------------------------------------
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    name: str = ""
+    role: str
+    fakultas_id: Optional[str] = None
+    prodi_id: Optional[str] = None
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    fakultas_id: Optional[str] = None
+    prodi_id: Optional[str] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None
+
+
+def public_user(doc: dict) -> dict:
+    return {
+        "id": str(doc["_id"]), "email": doc["email"], "name": doc.get("name", ""),
+        "role": doc.get("role", "dosen"), "fakultas_id": doc.get("fakultas_id"),
+        "prodi_id": doc.get("prodi_id"), "is_active": doc.get("is_active", True),
+    }
+
+
+@api_router.get("/users")
+async def list_users(admin: dict = Depends(require_role(ROLE_ADMIN))):
+    docs = await db.users.find({}).sort("email", 1).to_list(1000)
+    return [public_user(d) for d in docs]
+
+
+@api_router.post("/users")
+async def create_user(data: UserCreate, admin: dict = Depends(require_role(ROLE_ADMIN))):
+    if data.role not in (ROLE_ADMIN, ROLE_KAPRODI, ROLE_DOSEN):
+        raise HTTPException(status_code=400, detail="Role tidak valid")
+    email = data.email.lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=409, detail="Email sudah terdaftar")
+    doc = {
+        "email": email, "password_hash": hash_password(data.password), "name": data.name,
+        "role": data.role,
+        "fakultas_id": data.fakultas_id if data.role != ROLE_ADMIN else None,
+        "prodi_id": data.prodi_id if data.role != ROLE_ADMIN else None,
+        "is_active": True, "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    res = await db.users.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return public_user(doc)
+
+
+@api_router.put("/users/{uid}")
+async def update_user(uid: str, data: UserUpdate, admin: dict = Depends(require_role(ROLE_ADMIN))):
+    existing = await db.users.find_one({"_id": ObjectId(uid)})
+    if not existing:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    if str(existing["_id"]) == admin["id"] and data.is_active is False:
+        raise HTTPException(status_code=400, detail="Tidak dapat menonaktifkan akun sendiri")
+    upd = {}
+    for f in ("name", "role", "fakultas_id", "prodi_id", "is_active"):
+        v = getattr(data, f)
+        if v is not None:
+            upd[f] = v
+    if data.password:
+        upd["password_hash"] = hash_password(data.password)
+    if upd.get("role") == ROLE_ADMIN:
+        upd["fakultas_id"] = None
+        upd["prodi_id"] = None
+    await db.users.update_one({"_id": ObjectId(uid)}, {"$set": upd})
+    doc = await db.users.find_one({"_id": ObjectId(uid)})
+    return public_user(doc)
+
+
+@api_router.delete("/users/{uid}")
+async def delete_user(uid: str, admin: dict = Depends(require_role(ROLE_ADMIN))):
+    target = await db.users.find_one({"_id": ObjectId(uid)})
+    if not target:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    if str(target["_id"]) == admin["id"]:
+        raise HTTPException(status_code=400, detail="Tidak dapat menghapus akun sendiri")
+    if target.get("role") == ROLE_ADMIN and await db.users.count_documents({"role": ROLE_ADMIN, "is_active": True}) <= 1:
+        raise HTTPException(status_code=400, detail="Tidak dapat menghapus admin terakhir")
+    await db.users.delete_one({"_id": ObjectId(uid)})
+    return {"message": "User dihapus"}
+
+
+# ---------------------------------------------------------------------------
 # Startup: seed admin + sample data + indexes
 # ---------------------------------------------------------------------------
 async def seed_admin():
@@ -525,6 +706,24 @@ async def seed_sample_data():
     logger.info("Sample academic data seeded")
 
 
+async def seed_demo_users():
+    if await db.users.count_documents({"role": {"$in": [ROLE_KAPRODI, ROLE_DOSEN]}}) > 0:
+        return
+    ti = await db.prodi.find_one({"code": "TI"})
+    if not ti:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    await db.users.insert_many([
+        {"email": "kaprodi.ti@uinsa.ac.id", "password_hash": hash_password("kaprodi123"),
+         "name": "Kaprodi Teknik Informatika", "role": ROLE_KAPRODI,
+         "fakultas_id": ti["fakultas_id"], "prodi_id": ti["id"], "is_active": True, "created_at": now},
+        {"email": "dosen.ti@uinsa.ac.id", "password_hash": hash_password("dosen123"),
+         "name": "Dosen Teknik Informatika", "role": ROLE_DOSEN,
+         "fakultas_id": ti["fakultas_id"], "prodi_id": ti["id"], "is_active": True, "created_at": now},
+    ])
+    logger.info("Demo kaprodi & dosen users seeded")
+
+
 @app.on_event("startup")
 async def on_startup():
     try:
@@ -533,6 +732,7 @@ async def on_startup():
         pass
     await seed_admin()
     await seed_sample_data()
+    await seed_demo_users()
 
 
 @api_router.get("/")
