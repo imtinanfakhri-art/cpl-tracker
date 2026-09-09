@@ -15,6 +15,13 @@ import uuid
 import logging
 import bcrypt
 import jwt
+import re
+import ipaddress
+import secrets
+import httpx
+from html import escape as html_escape
+from html.parser import HTMLParser
+from urllib.parse import urlparse
 from datetime import datetime, timezone, timedelta
 
 # ---------------------------------------------------------------------------
@@ -151,6 +158,118 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Token kedaluwarsa")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token tidak valid")
+
+
+# ---------------------------------------------------------------------------
+# Email (Resend managed) + Audit log helpers
+# ---------------------------------------------------------------------------
+EMAIL_BASE_URL = "https://integrations.emergentagent.com"
+EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
+EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "SI-CPL UINSA")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+_SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
+_CRED_ASK = ("reply with your password", "reply with the code", "send your password", "cvv",
+             "send us your password", "enter your password below", "confirm your card number",
+             "your full card number", "seed phrase", "recovery phrase", "verify your card",
+             "social security number", "confirm your bank details")
+_HOSTISH = re.compile(r"\b(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,})", re.I)
+
+
+def _host_ok(host: str) -> bool:
+    if not host or "xn--" in host:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False
+    except ValueError:
+        pass
+    return not any(host == s or host.endswith("." + s) for s in _SHORTENERS)
+
+
+def _same_site(shown: str, real: str) -> bool:
+    return shown == real or real.endswith("." + shown) or shown.endswith("." + real)
+
+
+class _EmailScan(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.tags, self.urls, self.anchors = set(), [], []
+        self._href, self._text = None, []
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.add(tag.lower())
+        self.urls += [v for k, v in attrs if k.lower() in ("href", "src") and v]
+        if tag.lower() == "a":
+            self._href = dict((k.lower(), v) for k, v in attrs).get("href")
+            self._text = []
+
+    def handle_data(self, data):
+        if self._href is not None:
+            self._text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "a" and self._href is not None:
+            self.anchors.append((self._href, "".join(self._text)))
+            self._href, self._text = None, []
+
+
+def _assert_safe_email(subject: str, html: str) -> None:
+    scan = _EmailScan()
+    scan.feed(html)
+    if scan.tags & {"form", "input", "textarea", "select"}:
+        raise ValueError("No forms or input fields in email (G2)")
+    body = f"{subject}\n{html}".lower()
+    for p in _CRED_ASK:
+        if p in body:
+            raise ValueError(f"Email asks the recipient for credentials: {p!r} (G2)")
+    for url in scan.urls:
+        low = url.strip().lower()
+        if low.startswith(("mailto:", "tel:", "cid:", "#")):
+            continue
+        if not low.startswith("https://"):
+            raise ValueError(f"Email links/assets must be absolute https: {url!r} (G3)")
+        host = urlparse(low).hostname or ""
+        if not _host_ok(host) or urlparse(low).username is not None:
+            raise ValueError(f"Shortened, numeric-host or credential-bearing URL: {url!r} (G3)")
+    for href, text in scan.anchors:
+        real = urlparse(href.strip().lower()).hostname or ""
+        if not real:
+            continue
+        for m in _HOSTISH.finditer(text):
+            if not _same_site(m.group(1).lower(), real):
+                raise ValueError(f"Anchor text {m.group(1)!r} != real link host {real!r} (G3)")
+
+
+async def send_email(*, to: str, subject: str, html: str):
+    _assert_safe_email(subject, html)
+    payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+    try:
+        async with httpx.AsyncClient(timeout=30) as http_client:
+            resp = await http_client.post(
+                f"{EMAIL_BASE_URL}/api/v1/email/send",
+                headers={"X-Email-Key": EMAIL_KEY},
+                json=payload,
+            )
+        resp.raise_for_status()
+        return resp.json().get("id")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Email send failed: {e.response.status_code} {e.response.text}")
+        raise HTTPException(status_code=502, detail="Gagal mengirim email")
+    except Exception as e:
+        logger.error(f"Email send error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Gagal mengirim email")
+
+
+async def log_audit(user: Optional[dict], action: str, entity: str, entity_id: str = "", summary: str = ""):
+    await db.audit_logs.insert_one({
+        "id": str(uuid.uuid4()),
+        "actor_id": (user or {}).get("id"),
+        "actor_email": (user or {}).get("email", "sistem"),
+        "actor_role": (user or {}).get("role", "-"),
+        "action": action, "entity": entity, "entity_id": str(entity_id),
+        "summary": summary, "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -435,6 +554,7 @@ async def create_grade(data: GradeInput, user: dict = Depends(require_role(ROLE_
     await db.grades.insert_one(doc)
     doc.pop("_id", None)
     await enrich_grade(doc)
+    await log_audit(user, "buat", "nilai", doc["id"], f"{doc['mata_kuliah_name']} · {data.tahun_akademik} {data.semester_type} · Kelas {data.kelas}")
     return doc
 
 
@@ -451,12 +571,17 @@ async def update_grade(gid: str, data: GradeInput, user: dict = Depends(require_
     await db.grades.update_one({"id": gid}, {"$set": upd})
     doc = await db.grades.find_one({"id": gid}, {"_id": 0})
     await enrich_grade(doc)
+    await log_audit(user, "ubah", "nilai", gid, f"{doc['mata_kuliah_name']} · total {doc.get('total_score')}")
     return doc
 
 
 @api_router.delete("/grades/{gid}")
 async def delete_grade(gid: str, user: dict = Depends(require_role(ROLE_ADMIN, ROLE_KAPRODI, ROLE_DOSEN))):
+    target = await db.grades.find_one({"id": gid}, {"_id": 0})
+    if target:
+        await enrich_grade(target)
     await db.grades.delete_one({"id": gid})
+    await log_audit(user, "hapus", "nilai", gid, target.get("mata_kuliah_name", "") if target else "")
     return {"message": "Data nilai dihapus"}
 
 
@@ -502,6 +627,7 @@ async def bulk_grades(data: BulkInput, user: dict = Depends(require_role(ROLE_AD
         }
         await db.grades.insert_one(doc)
         created += 1
+    await log_audit(user, "impor", "nilai", "", f"{created} data via CSV")
     return {"created": created, "errors": errors}
 
 
@@ -564,6 +690,14 @@ async def dashboard(
     overall = round(sum(totals) / len(totals), 2) if totals else 0
     grade_distribution = [{"grade": k, "count": v} for k, v in grade_dist.items()]
 
+    scope = {"role": user.get("role"), "prodi_name": None, "fakultas_name": None}
+    if user.get("prodi_id"):
+        pr = await db.prodi.find_one({"id": user["prodi_id"]}, {"_id": 0})
+        scope["prodi_name"] = pr["name"] if pr else None
+    if user.get("fakultas_id"):
+        fk = await db.fakultas.find_one({"id": user["fakultas_id"]}, {"_id": 0})
+        scope["fakultas_name"] = fk["name"] if fk else None
+
     return {
         "counts": counts,
         "overall_average": overall,
@@ -571,6 +705,7 @@ async def dashboard(
         "category_averages": category_avg,
         "criteria_averages": criteria_avg,
         "grade_distribution": grade_distribution,
+        "scope": scope,
     }
 
 
@@ -625,6 +760,7 @@ async def create_user(data: UserCreate, admin: dict = Depends(require_role(ROLE_
     }
     res = await db.users.insert_one(doc)
     doc["_id"] = res.inserted_id
+    await log_audit(admin, "buat", "pengguna", str(res.inserted_id), f"{email} ({data.role})")
     return public_user(doc)
 
 
@@ -647,6 +783,7 @@ async def update_user(uid: str, data: UserUpdate, admin: dict = Depends(require_
         upd["prodi_id"] = None
     await db.users.update_one({"_id": ObjectId(uid)}, {"$set": upd})
     doc = await db.users.find_one({"_id": ObjectId(uid)})
+    await log_audit(admin, "ubah", "pengguna", uid, f"{existing['email']}")
     return public_user(doc)
 
 
@@ -660,7 +797,88 @@ async def delete_user(uid: str, admin: dict = Depends(require_role(ROLE_ADMIN)))
     if target.get("role") == ROLE_ADMIN and await db.users.count_documents({"role": ROLE_ADMIN, "is_active": True}) <= 1:
         raise HTTPException(status_code=400, detail="Tidak dapat menghapus admin terakhir")
     await db.users.delete_one({"_id": ObjectId(uid)})
+    await log_audit(admin, "hapus", "pengguna", uid, target.get("email", ""))
     return {"message": "User dihapus"}
+
+
+# ---------------------------------------------------------------------------
+# Password reset (email link) + Audit log
+# ---------------------------------------------------------------------------
+class ResetPasswordInput(BaseModel):
+    token: str
+    new_password: str
+
+
+@api_router.post("/users/{uid}/send-reset")
+async def send_reset(uid: str, admin: dict = Depends(require_role(ROLE_ADMIN))):
+    target = await db.users.find_one({"_id": ObjectId(uid)})
+    if not target:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(timezone.utc) + timedelta(hours=2)
+    await db.password_resets.insert_one({
+        "token": token, "user_id": str(target["_id"]), "email": target["email"],
+        "expires_at": expires.isoformat(), "used": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    link = f"{FRONTEND_URL}/reset-password?token={token}"
+    name = html_escape(target.get("name") or target["email"])
+    html = (
+        f'<table role="presentation" width="100%"><tr><td style="padding:24px;font-family:Arial,sans-serif;color:#0f172a">'
+        f'<h2 style="color:#064E3B;margin:0 0 8px">Atur Ulang Kata Sandi</h2>'
+        f'<p>Halo {name},</p>'
+        f'<p>Admin {html_escape(EMAIL_FROM_NAME)} membuatkan tautan untuk mengatur ulang kata sandi akun Anda. '
+        f'Klik tombol di bawah untuk membuat kata sandi baru. Tautan berlaku selama 2 jam.</p>'
+        f'<p style="margin:24px 0"><a href="{link}" style="background:#064E3B;color:#ffffff;padding:12px 22px;'
+        f'border-radius:8px;text-decoration:none;font-weight:bold">Atur Ulang Kata Sandi</a></p>'
+        f'<p style="font-size:12px;color:#64748b">Jika tombol tidak berfungsi, salin dan tempel tautan berikut di peramban Anda:<br>{link}</p>'
+        f'<p style="font-size:12px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:12px;margin-top:16px">'
+        f'Dikirim oleh {html_escape(EMAIL_FROM_NAME)}. Kami tidak pernah meminta kata sandi Anda melalui email. '
+        f'Abaikan email ini bila Anda tidak merasa memintanya.</p></td></tr></table>'
+    )
+    email_sent = False
+    email_error = None
+    if EMAIL_KEY:
+        try:
+            await send_email(to=target["email"], subject=f"Atur Ulang Kata Sandi — {EMAIL_FROM_NAME}", html=html)
+            email_sent = True
+        except HTTPException:
+            email_error = "Email gagal terkirim (alamat mungkin tidak valid). Bagikan tautan di bawah secara manual."
+    await log_audit(admin, "kirim_reset", "pengguna", uid, f"reset sandi -> {target['email']} ({'email' if email_sent else 'manual'})")
+    return {"status": "success", "email_sent": email_sent, "email": target["email"], "reset_link": link, "email_error": email_error, "expires_at": expires.isoformat()}
+
+
+@api_router.get("/auth/reset-info")
+async def reset_info(token: str):
+    rec = await db.password_resets.find_one({"token": token}, {"_id": 0})
+    if not rec or rec.get("used"):
+        raise HTTPException(status_code=400, detail="Tautan tidak valid atau sudah digunakan")
+    if datetime.now(timezone.utc) > datetime.fromisoformat(rec["expires_at"]):
+        raise HTTPException(status_code=400, detail="Tautan sudah kedaluwarsa")
+    return {"email": rec["email"], "valid": True}
+
+
+@api_router.post("/auth/reset-password")
+async def do_reset_password(data: ResetPasswordInput):
+    rec = await db.password_resets.find_one({"token": data.token})
+    if not rec or rec.get("used"):
+        raise HTTPException(status_code=400, detail="Tautan tidak valid atau sudah digunakan")
+    if datetime.now(timezone.utc) > datetime.fromisoformat(rec["expires_at"]):
+        raise HTTPException(status_code=400, detail="Tautan sudah kedaluwarsa")
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Kata sandi minimal 6 karakter")
+    await db.users.update_one({"_id": ObjectId(rec["user_id"])}, {"$set": {"password_hash": hash_password(data.new_password)}})
+    await db.password_resets.update_one({"token": data.token}, {"$set": {"used": True, "used_at": datetime.now(timezone.utc).isoformat()}})
+    await log_audit({"id": rec["user_id"], "email": rec["email"], "role": "-"}, "reset_sandi", "pengguna", rec["user_id"], "via tautan email")
+    return {"status": "success", "email": rec["email"]}
+
+
+@api_router.get("/audit")
+async def list_audit(entity: Optional[str] = None, limit: int = 200, admin: dict = Depends(require_role(ROLE_ADMIN))):
+    q = {}
+    if entity:
+        q["entity"] = entity
+    return await db.audit_logs.find(q, {"_id": 0}).sort("timestamp", -1).to_list(min(limit, 500))
 
 
 # ---------------------------------------------------------------------------

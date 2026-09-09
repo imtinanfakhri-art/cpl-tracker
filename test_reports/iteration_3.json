@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 3 testing of Ringkasan Prodi, Password Reset (send-reset + /reset-password), and Audit Log. Backend: added /app/backend/tests/test_iter3_features.py with 16 pytest cases — all 16 passed (dashboard scope for admin/kaprodi/dosen, RBAC on send-reset, reset-info valid/invalid, short password rejection, reset success + login, token reuse rejection, audit RBAC + filter + grade mutation records). Frontend: verified prodi-summary-card renders for kaprodi (Teknik Informatika + Fakultas Sains dan Teknologi) and dosen; NOT rendered for admin. Admin can see nav-audit and /audit page (audit-table + audit-entity-filter working, filter=Pengguna returns 7 rows). Reset flow: admin -> reset-user-<id> -> modal with reset-link-value + copy-reset-link-button shown for fake-domain emails. Public /reset-password?token=bogus shows reset-invalid-message. E2E: created test user via API -> admin UI clicked reset -> got link -> opened /reset-password -> submitted new pw -> redirected to /login -> logged in with new password successfully (HTTP 200) -> cleaned up test user.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard (kaprodi/dosen with no grades)", "issues": ["Pie chart 'Distribusi Predikat' legend shows 'Predikat undefined' entries when grade_distribution has zero-count items. Non-blocking; consider filtering zero-count items or fixing the Legend formatter to fall back to entry.value for grade name."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter3_features.py",
+    "/app/test_reports/pytest/pytest_iter3.xml"
+  ],
+  "backend_test_results": {
+    "TestDashboardScope": "3/3 pass — admin scope has role only; kaprodi & dosen have prodi_name=Teknik Informatika + fakultas_name containing 'Sains'",
+    "TestPasswordReset": "8/8 pass — dosen/kaprodi 403; admin returns reset_link+expires_at; reset-info valid returns email; bogus token -> 400; short pw -> 400; success + relogin with new pw; token reuse -> 400",
+    "TestAuditLog": "5/5 pass — dosen/kaprodi 403; admin lists w/ actor_email+action+entity+timestamp; entity=pengguna filter works; grade create/delete produce buat & hapus entries on entity=nilai"
+  },
+  "frontend_test_results": {
+    "prodi_summary_card_kaprodi": "PASS (Teknik Informatika + Fakultas Sains dan Teknologi)",
+    "prodi_summary_card_dosen": "PASS",
+    "admin_no_prodi_summary_card": "PASS (count=0)",
+    "reset_modal_fake_domain": "PASS (reset-link-value + copy-reset-link-button present)",
+    "reset_password_invalid_token": "PASS (reset-invalid-message: 'Tautan tidak valid atau sudah digunakan')",
+    "reset_password_e2e": "PASS (create user -> admin sends reset -> open link -> new pw -> redirect /login -> login 200)",
+    "audit_page": "PASS (audit-table renders; audit-entity-filter Pengguna returns 7 rows; kirim_reset, reset_sandi, buat, hapus actions all visible)",
+    "nav_audit_admin": "PASS (visible for admin)"
+  },
+  "action_items": [
+    "Cosmetic: Dashboard pie chart legend shows 'Predikat undefined' for zero-count grade buckets — filter grade_distribution to count>0 for legend, or use entry.payload?.grade fallback."
+  ],
+  "critical_code_review_comments": [
+    "send_reset endpoint returns reset_link unconditionally (even when email is delivered). This is documented as by-design for admin fallback; acceptable but consider hiding the link when email_sent=true to reduce accidental exposure.",
+    "log_audit uses role='-' when reset_sandi is performed by anonymous flow — makes filter/UX weaker. Consider setting actor_role='public' or keeping the target user's role for clarity.",
+    "reset_info returns generic 400 for both expired and used/invalid tokens; the /auth/reset-info endpoint distinguishes messages internally but frontend only reads detail. This is fine.",
+    "AuditLog page fetches on every entity change with no pagination beyond backend limit=200; adequate for now.",
+    "Password reset token TTL is 2 hours — reasonable; ensure old resets are periodically pruned (currently they linger in db.password_resets forever)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter3_features.py"
+  ],
+  "success_rate": {"backend": "100% (16/16 iter3; 49/49 cumulative)", "frontend": "100% for critical iter3 flows (prodi summary card, reset modal, /reset-password, E2E reset, audit page + filter)"},
+  "test_credentials": "admin: imtinan.fakhri@gmail.com/uinsa2024; kaprodi: kaprodi.ti@uinsa.ac.id/kaprodi123; dosen: dosen.ti@uinsa.ac.id/dosen123",
+  "seed_data_creation": "E2E test created a temporary user (e2e_reset_<hex>@uinsa.ac.id) via admin API, reset its password, then deleted it. No residual data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Frontend routes: '/' = Dashboard (not '/dashboard'). Login sets httpOnly cookies + returns Bearer token in body. Use page.expect_response for '/auth/login' rather than page.wait_for_url('**/dashboard**'). Reset link URL example: {FRONTEND_URL}/reset-password?token=<urlsafe>. Public endpoints (no auth): GET /api/auth/reset-info?token=, POST /api/auth/reset-password. Audit entries persist across tests — filter by entity to narrow.",
+  "rca of the issue": "No blocking issues found. Only minor cosmetic legend issue in Dashboard pie chart when there is no grade data."
+}

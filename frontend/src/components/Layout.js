@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { LOGO_URL } from "@/lib/cpl";
-import { LayoutDashboard, PencilLine, BookOpen, Building2, FileBarChart2, Users, LogOut } from "lucide-react";
+import { LayoutDashboard, PencilLine, BookOpen, Building2, FileBarChart2, Users, History, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
@@ -11,6 +11,7 @@ const NAV = [
   { to: "/matakuliah", label: "Mata Kuliah", icon: BookOpen, testid: "nav-matakuliah", roles: ["admin", "kaprodi"] },
   { to: "/fakultas", label: "Fakultas & Prodi", icon: Building2, testid: "nav-fakultas", roles: ["admin"] },
   { to: "/users", label: "Manajemen Pengguna", icon: Users, testid: "nav-users", roles: ["admin"] },
+  { to: "/audit", label: "Log Aktivitas", icon: History, testid: "nav-audit", roles: ["admin"] },
   { to: "/laporan", label: "Laporan & Cetak", icon: FileBarChart2, testid: "nav-laporan", roles: ["admin", "kaprodi", "dosen"] },
 ];
 

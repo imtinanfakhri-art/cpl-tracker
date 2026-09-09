@@ -10,6 +10,8 @@ import MataKuliahPage from "@/pages/MataKuliahPage";
 import FakultasProdiPage from "@/pages/FakultasProdiPage";
 import LaporanPage from "@/pages/LaporanPage";
 import UserManagement from "@/pages/UserManagement";
+import AuditLog from "@/pages/AuditLog";
+import ResetPassword from "@/pages/ResetPassword";
 import { Loader2 } from "lucide-react";
 
 function Protected({ children }) {
@@ -31,6 +33,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route
               element={
                 <Protected>
@@ -43,6 +46,7 @@ function App() {
               <Route path="/matakuliah" element={<MataKuliahPage />} />
               <Route path="/fakultas" element={<FakultasProdiPage />} />
               <Route path="/users" element={<UserManagement />} />
+              <Route path="/audit" element={<AuditLog />} />
               <Route path="/laporan" element={<LaporanPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

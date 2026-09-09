@@ -97,6 +97,31 @@ export default function Dashboard() {
         <div className="h-96 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
       ) : (
         <>
+          {data.scope && data.scope.role !== "admin" && data.scope.prodi_name && (
+            <Card className="p-5 mb-6 border-l-4 border-l-[#D97706] shadow-sm" data-testid="prodi-summary-card">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Ringkasan Prodi Anda</p>
+                  <h2 className="font-display text-xl font-bold text-slate-900 mt-0.5">{data.scope.prodi_name}</h2>
+                  <p className="text-sm text-slate-500">{data.scope.fakultas_name}</p>
+                </div>
+                <div className="flex gap-8">
+                  <div className="text-center">
+                    <p className="font-mono text-3xl font-extrabold text-[#064E3B]">{fmt(data.counts.grades ? data.overall_average : null)}</p>
+                    <p className="text-xs text-slate-500">Rata-rata CPL</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-mono text-3xl font-extrabold text-slate-800">{data.counts.grades}</p>
+                    <p className="text-xs text-slate-500">Data Nilai</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-mono text-3xl font-extrabold text-slate-800">{data.counts.matakuliah}</p>
+                    <p className="text-xs text-slate-500">Mata Kuliah</p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <Kpi icon={Building2} label="Fakultas" value={data.counts.fakultas} testid="kpi-fakultas" />
             <Kpi icon={GraduationCap} label="Program Studi" value={data.counts.prodi} testid="kpi-prodi" />
@@ -156,7 +181,7 @@ export default function Dashboard() {
                     {data.grade_distribution.map((g) => <Cell key={g.grade} fill={GRADE_COLORS[g.grade]} />)}
                   </Pie>
                   <Tooltip formatter={(value, name, props) => [value, `Predikat ${props.payload.grade}`]} />
-                  <Legend formatter={(value, entry) => `Predikat ${entry.payload.grade}`} />
+                  <Legend payload={data.grade_distribution.filter((g) => g.count > 0).map((g) => ({ value: `Predikat ${g.grade}`, type: "square", color: GRADE_COLORS[g.grade] }))} />
                 </PieChart>
               </ResponsiveContainer>
             </Card>

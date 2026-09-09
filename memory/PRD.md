@@ -35,6 +35,14 @@ Aplikasi penghitungan pencapaian Capaian Kompetensi Lulusan (CPL) untuk UIN Suna
 - Filter & pencarian pada tabel data nilai (halaman Input).
 - Verified: 18/18 backend tests iterasi 2 pass (33/33 kumulatif); E2E role-based flows pass.
 
+## Implemented (2026-06-09) — Iterasi 3
+- Ringkasan Prodi: kartu ringkasan pencapaian CPL (prodi, fakultas, rata-rata, jumlah data & MK) di Dashboard untuk kaprodi/dosen (scoped); admin lihat global. Field `scope` di /api/reports/dashboard.
+- Reset Kata Sandi: admin kirim tautan reset via email (Resend managed). Token sekali pakai, berlaku 2 jam. Fallback: bila email tak terkirim, admin dapat tautan untuk disalin. Halaman publik /reset-password (validasi token + form). Endpoint: /api/users/{id}/send-reset, /api/auth/reset-info, /api/auth/reset-password.
+- Audit Log: catat perubahan data nilai & akun (pelaku, aksi, entitas, waktu, keterangan) via log_audit(); halaman admin /audit dengan filter. Endpoint /api/audit (admin only).
+- Verified: 16/16 backend tests iterasi 3 pass (49/49 kumulatif); E2E reset & audit & prodi summary pass.
+
+## Catatan
+- Email hanya terkirim ke alamat deliverable (Resend managed). Demo user berdomain fiktif -> gunakan fallback tautan salin.
+
 ## Backlog
-- P1: Filter tambahan pada tabel data nilai; ekspor Excel.
-- P2: Multi-user & role (Kaprodi/Dosen), brute-force lockout, import nilai CSV.
+- P2: prune token reset kadaluarsa terjadwal; pagination audit log; impor Excel (.xlsx) untuk nilai massal.
